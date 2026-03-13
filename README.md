@@ -1,11 +1,10 @@
+AWS Event Driven Serverless Pipeline
 
-Event-driven serverless architecture on AWS using S3, SNS, SQS, Lambda and DynamoDB.
+Event driven serverless architecture built on AWS using S3, SNS, SQS, Lambda and DynamoDB.
 
-This project demonstrates a small event driven architecture built on AWS.
+This project demonstrates a simple event driven pipeline where uploading a file to Amazon S3 automatically triggers multiple independent processing steps.
 
-The goal was to build a system where uploading a file automatically triggers multiple independent processing steps without tightly coupling the services together.
-
-Instead of sending the upload directly to a single processor, the system publishes an event and allows different consumers to react to it independently. This makes the architecture easier to scale and extend later.
+Instead of sending the upload directly to a single processor, the system publishes an event and allows different consumers to react to it independently. This keeps the system loosely coupled and makes it easier to scale or extend later.
 
 Architecture
 
@@ -13,13 +12,14 @@ Architecture
 
 How the system works
 
-1. A client uploads a file to Amazon S3  
-2. S3 generates an ObjectCreated event  
-3. The event is sent to an SNS topic  
-4. SNS distributes the message to multiple SQS queues  
-5. Each queue triggers a different Lambda function  
-6. The metadata Lambda stores file information in DynamoDB  
-7. Lambda executions are recorded in CloudWatch Logs  
+1. A client uploads a file to Amazon S3
+2. S3 generates an ObjectCreated event
+3. The event is sent to an SNS topic
+4. SNS distributes the message to multiple SQS queues
+5. Each queue triggers a different Lambda function
+6. The metadata Lambda extracts information from the event
+7. The metadata is stored in DynamoDB
+8. Lambda executions are recorded in CloudWatch Logs
 
 Architecture decisions
 
@@ -27,21 +27,21 @@ Amazon S3
 
 S3 is used as the entry point of the system.
 
-Reasons
+Why this service was used
 
-1. Durable object storage  
-2. Built in event notification system  
-3. Direct integration with other AWS services  
+1. Highly durable object storage
+2. Built in event notification system
+3. Direct integration with other AWS services
 
 Amazon SNS
 
-SNS is responsible for distributing the event.
+SNS is responsible for distributing the upload event.
 
-Reasons
+Why this service was used
 
-1. Enables fan out messaging  
-2. Allows multiple consumers to react to the same event  
-3. Keeps producers and consumers independent  
+1. Enables fan out messaging
+2. Multiple consumers can react to the same event
+3. Keeps producers and consumers independent
 
 Amazon SQS
 
@@ -50,50 +50,50 @@ SQS queues sit between the event layer and the compute layer.
 Two queues are used
 
 Image processing queue  
-Metadata processing queue  
+Metadata processing queue
 
-Reasons
+Why this service was used
 
-1. Decouples services  
-2. Buffers traffic spikes  
-3. Provides reliable message delivery  
-4. Enables asynchronous processing  
+1. Decouples services
+2. Buffers traffic spikes
+3. Ensures reliable message delivery
+4. Enables asynchronous processing
 
 AWS Lambda
 
-Lambda functions process the messages coming from the queues.
+Lambda functions process messages coming from the queues.
 
 Two functions exist in this project
 
 image processor  
-metadata processor  
+metadata processor
 
-Reasons
+Why this service was used
 
-1. Serverless compute  
-2. Automatic scaling  
-3. No infrastructure management  
-4. Native integration with SQS  
+1. Serverless compute
+2. Automatic scaling
+3. No infrastructure management
+4. Native integration with SQS
 
 Amazon DynamoDB
 
-DynamoDB stores metadata about uploaded files.
+DynamoDB stores metadata extracted from the uploaded file event.
 
-Reasons
+Why this service was used
 
-1. Serverless database  
-2. Low latency reads and writes  
-3. Automatically scales with workload  
+1. Serverless NoSQL database
+2. Low latency reads and writes
+3. Automatically scales with workload
 
 Amazon CloudWatch Logs
 
-CloudWatch is used to observe Lambda execution.
+CloudWatch is used to observe Lambda execution and debug the event flow.
 
-Reasons
+Why this service was used
 
-1. Centralized logging  
-2. Useful for debugging serverless workloads  
-3. Helps understand the event flow through the system  
+1. Centralized logging
+2. Debugging serverless workloads
+3. Visibility into event processing
 
 Project structure
 
@@ -124,23 +124,65 @@ aws-event-driven-serverless-pipeline
 
 Screenshots
 
+The following screenshots show the architecture components and the system running inside AWS.
+
 S3 bucket
+
+The S3 bucket used for uploads and the folder that triggers the event pipeline.
 
 ![S3 Bucket](screenshots/01_s3_bucket.png)
 
+S3 event notification
+
+Configuration of the ObjectCreated event that sends notifications to the SNS topic.
+
+![S3 Event Notification](screenshots/02_s3_event_notification.png)
+
 SNS topic
+
+SNS topic responsible for distributing the upload event to multiple consumers.
 
 ![SNS Topic](screenshots/03_sns_topic.png)
 
 SQS queues
 
+Two SQS queues used to decouple the processing layer.
+
 ![SQS Queues](screenshots/04_sqs_queues.png)
+
+SNS subscriptions
+
+Subscriptions connecting the SNS topic to the two SQS queues.
+
+![SNS Subscriptions](screenshots/05_sns_subscriptions.png)
 
 Lambda functions
 
+The two serverless functions responsible for processing events from the queues.
+
 ![Lambda Functions](screenshots/06_lambda_functions.png)
 
+Lambda triggers
+
+Event source mapping showing how SQS triggers each Lambda function.
+
+![Lambda Triggers](screenshots/07_lambda_triggers.png)
+
+DynamoDB table
+
+The DynamoDB table used to store metadata extracted from the upload event.
+
+![DynamoDB Table](screenshots/08_dynamodb_table.png)
+
+CloudWatch logs
+
+Execution logs generated by the Lambda functions during event processing.
+
+![CloudWatch Logs](screenshots/09_cloudwatch_logs.png)
+
 DynamoDB result
+
+Example record written to DynamoDB after the upload event is processed.
 
 ![DynamoDB Result](screenshots/10_dynamodb_result.png)
 
@@ -148,8 +190,8 @@ Things I learned while building this
 
 Building the architecture in the AWS console highlighted how important service permissions are. S3 cannot publish to SNS without the correct topic policy, and Lambda cannot read from SQS without the proper IAM role permissions.
 
-Another important lesson was how useful SQS is for decoupling systems. Even though both Lambda functions react to the same event, they operate independently and can scale separately.
+Another useful takeaway was how SQS helps decouple systems. Even though both Lambda functions react to the same upload event, they operate independently and can scale separately.
 
-Working with the event payload also helped clarify how AWS services pass structured events through multiple layers. The Lambda functions need to unpack the SQS message, then the SNS message, and finally the original S3 event to extract the file information.
+Working with the event payload also helped clarify how AWS services pass structured events through multiple layers. The Lambda functions unpack the SQS message, then the SNS message, and finally the original S3 event to extract the file information.
 
-Finally, seeing the entire flow from S3 upload to DynamoDB record reinforced how powerful serverless architectures can be when services are connected through events rather than direct calls.
+Seeing the full flow from S3 upload to a DynamoDB record reinforced how powerful serverless architectures can be when services communicate through events instead of direct service calls.
